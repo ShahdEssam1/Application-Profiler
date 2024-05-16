@@ -1,0 +1,73 @@
+import os
+
+# Define a custom regular expression matcher function
+def custom_match(pattern, string):
+    match = None
+    i = 0
+    while i < len(string) and match is None:
+        match = match_here(pattern, string[i:])
+        i += 1
+    return match
+
+# Define a helper function to match the pattern at the beginning of the string
+def match_here(pattern, string):
+    if not pattern:
+        return True
+    if pattern == '$':
+        return not string
+    if len(pattern) > 1 and pattern[1] in '*?':
+        return match_star(pattern[0], pattern[2:], string)
+    if pattern[0] == '^':
+        return match_here(pattern[1:], string)
+    if string and (pattern[0] == '.' or pattern[0] == string[0]):
+        return match_here(pattern[1:], string[1:])
+    return False
+
+# Define a helper function to handle '*' and '?' operators
+def match_star(char, pattern, string):
+    while True:
+        if match_here(pattern, string):
+            return True
+        if not string or (string[0] != char and char != '.'):
+            return False
+        string = string[1:]
+
+# Custom match function using the defined regular expression matcher
+def custom_re_match(pattern, string):
+    return custom_match(pattern, string) is not None
+
+def get_process_info(process_name):
+    process_info = []
+
+    # Run the tasklist command and capture its output
+    output = os.popen('tasklist').read()
+    print("Tasklist Output:")
+    print(output)
+
+    # Parse the output to extract process information
+    for line in output.split('\n'):
+        print("Checking line:", line)
+        # Check if the line matches the pattern
+        if custom_re_match(r'(.+?)\s+(\d+)\s+\S+\s+\S+\s+(\S+)', line):
+            match = custom_match(r'(.+?)\s+(\d+)\s+\S+\s+\S+\s+(\S+)', line)
+            if match:
+                name, pid, mem = match.groups()
+                if process_name.lower() in name.lower():
+                    memory = float(mem.replace(',', '').rstrip('K')) / 1024 if mem.endswith('K') else float(mem.replace(',', ''))
+                    process_info.append({
+                        'name': name,
+                        'pid': int(pid),
+                        'memory_usage': memory
+                    })
+
+    return process_info
+
+def profile_application(process_name, interval=1):
+    while True:
+        process_info = get_process_info(process_name)
+        for info in process_info:
+            print(f"Process Name: {info['name']}, PID: {info['pid']}, Memory Usage: {info['memory_usage']:.2f} MB")
+        # Removed time.sleep(interval)
+
+# Example usage:
+profile_application("")
