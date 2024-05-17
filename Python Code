@@ -1,73 +1,68 @@
 import os
+import time
 
-# Define a custom regular expression matcher function
-def custom_match(pattern, string):
-    match = None
-    i = 0
-    while i < len(string) and match is None:
-        match = match_here(pattern, string[i:])
-        i += 1
-    return match
 
-# Define a helper function to match the pattern at the beginning of the string
-def match_here(pattern, string):
-    if not pattern:
-        return True
-    if pattern == '$':
-        return not string
-    if len(pattern) > 1 and pattern[1] in '*?':
-        return match_star(pattern[0], pattern[2:], string)
-    if pattern[0] == '^':
-        return match_here(pattern[1:], string)
-    if string and (pattern[0] == '.' or pattern[0] == string[0]):
-        return match_here(pattern[1:], string[1:])
-    return False
+# Custom function to get the current system time in seconds since epoch
+def get_epoch_time():
+    return int(time.time())
 
-# Define a helper function to handle '*' and '?' operators
-def match_star(char, pattern, string):
-    while True:
-        if match_here(pattern, string):
-            return True
-        if not string or (string[0] != char and char != '.'):
-            return False
-        string = string[1:]
 
-# Custom match function using the defined regular expression matcher
-def custom_re_match(pattern, string):
-    return custom_match(pattern, string) is not None
+# Custom function to get the current time in a specific format
+def get_current_time():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
 
-def get_process_info(process_name):
+
+# Custom function to sleep for a given number of seconds
+def custom_sleep(seconds):
+    time.sleep(seconds)
+
+
+# Function to get process information using tasklist command
+def get_process_info():
     process_info = []
 
-    # Run the tasklist command and capture its output
-    output = os.popen('tasklist').read()
-    print("Tasklist Output:")
-    print(output)
+    # Execute tasklist command and capture its output
+    tasklist_output = os.popen('tasklist').read()
 
-    # Parse the output to extract process information
-    for line in output.split('\n'):
-        print("Checking line:", line)
-        # Check if the line matches the pattern
-        if custom_re_match(r'(.+?)\s+(\d+)\s+\S+\s+\S+\s+(\S+)', line):
-            match = custom_match(r'(.+?)\s+(\d+)\s+\S+\s+\S+\s+(\S+)', line)
-            if match:
-                name, pid, mem = match.groups()
-                if process_name.lower() in name.lower():
-                    memory = float(mem.replace(',', '').rstrip('K')) / 1024 if mem.endswith('K') else float(mem.replace(',', ''))
+    # Check if tasklist command executed successfully
+    if tasklist_output.strip():  # Check if the output is not empty
+        # Parse the output to extract process information
+        for line in tasklist_output.split('\n')[3:]:
+            parts = line.split()
+            if len(parts) >= 4:
+                try:
+                    pid = int(parts[1])
                     process_info.append({
-                        'name': name,
-                        'pid': int(pid),
-                        'memory_usage': memory
+                        'name': parts[0],
+                        'pid': pid,
+                        'memory_usage': float(parts[4].replace(',', '')) / 1024  # Memory usage in MB
                     })
+                except ValueError:
+                    # Skip lines that don't contain valid process information
+                    pass
+    else:
+        print("Error: Unable to fetch process information using tasklist command.")
 
     return process_info
 
-def profile_application(process_name, interval=1):
-    while True:
-        process_info = get_process_info(process_name)
-        for info in process_info:
-            print(f"Process Name: {info['name']}, PID: {info['pid']}, Memory Usage: {info['memory_usage']:.2f} MB")
-        # Removed time.sleep(interval)
 
-# Example usage:
-profile_application("")
+# Function to profile application and write to a CSV file
+def profile_application(interval=1, duration=10):
+    end_time = get_epoch_time() + duration
+    with open('process_profile.csv', 'w') as csvfile:
+        # Write the header row
+        csvfile.write('timestamp,name,pid,memory_usage_MB\n')
+
+        while get_epoch_time() < end_time:
+            process_info = get_process_info()
+            timestamp = get_current_time()
+            for info in process_info:
+                # Write the data row
+                csvfile.write(f'{timestamp},{info["name"]},{info["pid"]},{info["memory_usage"]:.2f}\n')
+                print(f"Timestamp: {timestamp}, Process Name: {info['name']}, PID: {info['pid']}, "
+                      f"Memory Usage: {info['memory_usage']:.2f} MB")
+            custom_sleep(interval)
+
+
+# Example usage
+profile_application(interval=2, duration=30)
